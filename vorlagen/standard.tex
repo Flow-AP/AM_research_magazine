@@ -9,7 +9,8 @@
 %  Eine eigene Vorlage muss nur diese Makros definieren:
 %    \rubrik{Titel}            Beginn einer Rubrik
 %    \rubrikende               Ende einer Rubrik
-%    \artikel{Titel}{Quelle}{Datum}{URL}{Autoren}{Text}
+%    \artikel{Titel}{Quelle}{Datum}{URL}{Autoren}{Teaser}{Abstract}
+%                              (#6 und #7 können leer sein)
 %    \editorial{Text}
 % =============================================================================
 \documentclass[a4paper,10pt]{scrartcl}
@@ -52,15 +53,21 @@
 }
 \newcommand{\rubrikende}{\end{multicols}}
 
-\newcommand{\artikel}[6]{%
+\newcommand{\artikel}[7]{%
   \par\noindent\begin{minipage}[t]{\linewidth}%
   {\sffamily\bfseries\color{amblau}#1\par}\nopagebreak[4]\vspace{1pt}%
   {\footnotesize\sffamily\color{amgrau}#2%
     \if\relax\detokenize{#3}\relax\else\ \textbullet\ #3\fi\par}%
   \if\relax\detokenize{#5}\relax\else{\footnotesize\itshape\color{amgrau}#5\par}\fi
   \vspace{3pt}%
-  {\small #6\par}\vspace{2pt}%
+  \if\relax\detokenize{#6}\relax\else{\small #6\par}\vspace{2pt}\fi
   {\footnotesize\sffamily\href{#4}{\color{amakzent}$\rightarrow$\ Zur Quelle}\par}%
+  \if\relax\detokenize{#7}\relax\else
+    \vspace{4pt}%
+    \colorbox{amblau!7}{\parbox{\dimexpr\linewidth-2\fboxsep\relax}{\vspace{2pt}%
+      {\footnotesize\sffamily\bfseries\color{amblau}Abstract\par}\vspace{1pt}%
+      {\small #7\par}\vspace{2pt}}}\par
+  \fi
   \vspace{6pt}{\color{amgrau!30}\rule{\linewidth}{0.4pt}}%
   \end{minipage}\par\vspace{8pt}%
 }

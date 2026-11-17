@@ -17,7 +17,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import quote
 
-from am_magazin import latex, quellen
+from am_magazin import abstract, latex, quellen
 
 BASIS = Path(__file__).resolve().parent
 CONFIG = BASIS / "config" / "quellen.json"
@@ -56,6 +56,7 @@ def tex_aus_anfrage(daten: dict) -> str:
         untertitel=daten.get("untertitel", ""),
         ausgabe=daten.get("ausgabe", ""),
         editorial=daten.get("editorial", ""),
+        teaser=bool(daten.get("teaser", True)),
     )
 
 
@@ -103,6 +104,7 @@ class Handler(BaseHTTPRequestHandler):
                 "rubriken": [{"id": r["id"], "titel": r["titel"]} for r in cfg["rubriken"]],
                 "vorlagen": vorlagen_liste(),
                 "compiler": latex.compiler_verfuegbar(),
+                "ki": abstract.ki_status(),
             })
         else:
             self._senden(404, b"Nicht gefunden", "text/plain; charset=utf-8")
@@ -123,6 +125,14 @@ class Handler(BaseHTTPRequestHandler):
                 max_zeichen=int(daten.get("max_zeichen", 700)),
             )
             return self._json(ergebnis)
+
+        if self.path == "/api/abstracts":
+            ergebnis = abstract.abstracts_erzeugen(
+                daten.get("artikel", []),
+                ki=bool(daten.get("ki", True)),
+                volltext=bool(daten.get("volltext", True)),
+            )
+            return self._json({"abstracts": ergebnis})
 
         if self.path == "/api/tex":
             code = tex_aus_anfrage(daten)
@@ -152,8 +162,15 @@ def cli(args):
     for f in erg["fehler"]:
         print(f"  ! {f['quelle']}: {f['meldung']}")
     print(f"  {len(erg['artikel'])} Meldungen gefunden.")
+    if args.abstracts:
+        st = abstract.ki_status()
+        print(f"Schreibe Abstracts ({'KI: ' + st['modell'] if st['verfuegbar'] else 'ohne KI: ' + str(st['hinweis'])}) …")
+        res = abstract.abstracts_erzeugen(erg["artikel"], ki=not args.ohne_ki)
+        for a in erg["artikel"]:
+            a["abstract"] = res.get(a["id"], {}).get("abstract", "")
     code = latex.tex_erzeugen(vorlage_laden(args.vorlage), erg["artikel"], cfg["rubriken"],
-                              titel=args.titel, untertitel=args.untertitel, ausgabe=args.ausgabe)
+                              titel=args.titel, untertitel=args.untertitel, ausgabe=args.ausgabe,
+                              teaser=not args.ohne_teaser)
     basis = dateiname(args.titel)
     print(f"  TeX: {speichern(basis + '.tex', code)}")
     if args.pdf:
@@ -177,6 +194,9 @@ def main():
     ap.add_argument("--ausgabe", default=f"KW {dt.date.today().isocalendar()[1]}/{dt.date.today().year}")
     ap.add_argument("--vorlage", default="standard.tex")
     ap.add_argument("--pdf", action="store_true", help="(nur --cli) zusätzlich PDF erzeugen")
+    ap.add_argument("--abstracts", action="store_true", help="(nur --cli) zu jeder Meldung einen Abstract schreiben")
+    ap.add_argument("--ohne-ki", action="store_true", help="Abstracts ohne Claude, nur als Textauszug")
+    ap.add_argument("--ohne-teaser", action="store_true", help="Original-Teaser nicht ins Heft übernehmen")
     args = ap.parse_args()
 
     if args.cli:

@@ -13,6 +13,8 @@ Daraus setzt es ein Magazin als **LaTeX-Datei** und auf Wunsch direkt als **PDF*
 ## Voraussetzungen
 
 * **Python 3.9 oder neuer.** Es werden keine weiteren Pakete benötigt, nur die Standardbibliothek.
+* **Optional für KI-Abstracts:** `pip install anthropic` und ein Claude-API-Schlüssel.
+  Den Schlüssel setzt du als Umgebungsvariable `ANTHROPIC_API_KEY` oder hinterlegst ihn einmalig mit `ant auth login`.
 * **Für das PDF eine LaTeX-Installation:** TeX Live, MiKTeX oder MacTeX, mit `latexmk` oder `pdflatex` im Pfad.
   Ohne LaTeX lädst du einfach die `.tex`-Datei herunter und übersetzt sie zum Beispiel in Overleaf.
 
@@ -26,6 +28,8 @@ Unter Windows startest du stattdessen `start.bat` per Doppelklick. Der Browser �
 
 1. **Suche:** Zeitraum, Anzahl pro Quelle und Quellen wählen, dann auf *Netz durchsuchen* klicken.
 2. **Auswahl:** Meldungen an- oder abhaken, die Rubrik ändern und Zusammenfassungen direkt bearbeiten.
+   Danach auf *Abstracts schreiben* klicken: Zu jeder ausgewählten Meldung entsteht ein kurzer deutscher Abstract.
+   Er steht im PDF direkt unter dem Link zur Quelle und lässt sich vorher im Feld darunter bearbeiten.
 3. **Ausgabe:** Titel, Ausgabe und Editorial eintragen, dann *TeX-Datei herunterladen* oder *PDF erzeugen* wählen.
    Alle Dateien landen zusätzlich im Ordner `ausgaben/`.
 
@@ -35,7 +39,24 @@ Unter Windows startest du stattdessen `start.bat` per Doppelklick. Der Browser �
 python3 magazin.py --cli --tage 7 --pdf
 ```
 
-Weitere Optionen zeigt `python3 magazin.py --help`.
+Mit Abstracts: `python3 magazin.py --cli --tage 7 --abstracts --pdf`.
+Weitere Optionen zeigt `python3 magazin.py --help`, z. B. `--ohne-ki` und `--ohne-teaser`.
+
+## Abstracts
+
+So entsteht der Abstract zu jeder Meldung:
+
+1. Das Programm liest die verlinkte Originalseite und zieht den Fließtext heraus.
+   Ist die Seite gesperrt oder enthält kaum Text, nimmt es stattdessen den Teaser bzw. das Paper-Abstract aus dem Feed.
+2. **Mit KI:** Claude (`claude-opus-5-5`, Aufwand `low`) schreibt daraus 2–3 sachliche Sätze auf Deutsch, höchstens 70 Wörter.
+   Claude darf dabei nur Informationen aus dem Text verwenden.
+   Lehnt das Modell eine Anfrage ab, springt automatisch ein Ersatzmodell ein (serverseitiger Fallback).
+   Ein anderes Modell stellst du über die Umgebungsvariable `AM_MAGAZIN_MODELL` ein.
+3. **Ohne KI** (kein Paket oder kein Schlüssel): Als Abstract dienen die ersten Sätze des Textes. Sie bleiben in der Originalsprache.
+
+An jedem Abstract zeigt eine Markierung, wie er entstanden ist, zum Beispiel „KI (Volltext)“ oder „Auszug (Teaser)“.
+Die KI-Abstracts solltest du kurz gegenlesen, bevor das Heft rausgeht.
+Jeder Abstract ist ein API-Aufruf: Die Kosten richten sich nach der Zahl der Meldungen, pro Ausgabe meist nur wenige Cent.
 
 ## Quellen
 
@@ -73,7 +94,7 @@ Das Programm ersetzt diese Platzhalter (nicht in Kommentarzeilen):
 
 ```latex
 \rubrik{Titel der Rubrik}
-\artikel{Titel}{Quelle}{Datum}{URL}{Autoren}{Zusammenfassung}
+\artikel{Titel}{Quelle}{Datum}{URL}{Autoren}{Teaser}{Abstract}   % #6 und #7 können leer sein
 ...
 \rubrikende
 \editorial{Text}
@@ -86,6 +107,7 @@ Als Ausgangspunkt dient `vorlagen/standard.tex`. Alle Texte kommen bereits LaTeX
 ```
 magazin.py            Webserver + CLI
 am_magazin/quellen.py Abruf (RSS/Atom, arXiv, Crossref), Dubletten, Rubriken
+am_magazin/abstract.py Volltext lesen und Abstracts schreiben (Claude oder Textauszug)
 am_magazin/latex.py   LaTeX-Erzeugung und PDF-Kompilierung
 static/index.html     Browser-Oberfläche
 config/quellen.json   Quellen und Rubriken

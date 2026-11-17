@@ -43,6 +43,10 @@
   .meta { font-size: 13px; color: var(--leise); display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; }
   .meta select { width: auto; margin: 0; padding: 2px 6px; font-size: 13px; }
   .artikel textarea { font-size: 13px; min-height: 64px; }
+  .feld { font-size: 12px; color: var(--leise); margin-top: 6px; display: flex; gap: 8px; align-items: center; }
+  .marke { font-size: 11px; border-radius: 4px; padding: 0 5px; background: var(--bg); border: 1px solid var(--linie); }
+  .abstract textarea { border-left: 3px solid var(--blau); }
+  .check { display: flex; gap: 6px; align-items: center; color: var(--text); font-size: 14px; }
   pre { white-space: pre-wrap; font-size: 12px; max-height: 260px; overflow: auto; background: var(--bg); padding: 10px; border-radius: 6px; }
   .leer { color: var(--leise); font-style: italic; }
 </style>
@@ -77,6 +81,12 @@
       <button class="zweit" id="alleAus">Keine auswählen</button>
       <span class="status" id="zaehler"></span>
     </div>
+    <div class="leiste">
+      <button id="abstractBtn" disabled>Abstracts schreiben</button>
+      <label class="check"><input type="checkbox" id="mitKi" checked> mit KI (Claude)</label>
+      <label class="check"><input type="checkbox" id="nurLeere"> nur fehlende</label>
+      <span class="status" id="abstractStatus"></span>
+    </div>
     <div id="ergebnisse"><p class="leer">Noch keine Suche durchgeführt.</p></div>
   </section>
 
@@ -88,6 +98,7 @@
       <label>Ausgabe<input type="text" id="ausgabe"></label>
       <label>Vorlage<select id="vorlage"></select></label>
     </div>
+    <label class="check" style="margin-top:12px"><input type="checkbox" id="teaser" checked> Original-Teaser mit ins Heft übernehmen (der Abstract steht immer unter der Quelle)</label>
     <label style="margin-top:12px">Editorial (optional, Leerzeile = neuer Absatz)<textarea id="editorial" rows="3"></textarea></label>
     <div class="leiste">
       <button id="texBtn" disabled>TeX-Datei herunterladen</button>
@@ -137,6 +148,11 @@ async function init() {
     $(id).addEventListener("change", () => speicher.schreiben(id, $(id).value));
   }
   $("ausgabe").value = kw();
+  if (!config.ki.verfuegbar) {
+    $("mitKi").checked = false; $("mitKi").disabled = true;
+    $("mitKi").parentElement.title = config.ki.hinweis || "";
+    $("abstractStatus").textContent = "KI nicht verfügbar – Abstracts werden als Textauszug erstellt. (" + (config.ki.hinweis || "") + ")";
+  }
   if (!config.compiler) {
     $("pdfBtn").title = "Kein LaTeX gefunden – bitte TeX Live/MiKTeX installieren oder die TeX-Datei z. B. in Overleaf übersetzen.";
   }
@@ -197,7 +213,14 @@ function karte(a) {
   sel.onchange = () => { a.rubrik = sel.value; zeichnen(); };
   meta.append(info, sel);
   const ta = document.createElement("textarea"); ta.value = a.text; ta.oninput = () => { a.text = ta.value; };
-  rechts.append(link, meta, ta);
+  const kopf1 = document.createElement("div"); kopf1.className = "feld"; kopf1.textContent = "Original-Teaser";
+  const box = document.createElement("div"); box.className = "abstract";
+  const kopf2 = document.createElement("div"); kopf2.className = "feld"; kopf2.textContent = "Abstract (steht im PDF unter der Quelle)";
+  if (a.methode) { const m = document.createElement("span"); m.className = "marke"; m.textContent = a.methode; m.title = a.hinweis || ""; kopf2.append(m); }
+  const ab = document.createElement("textarea"); ab.value = a.abstract || ""; ab.placeholder = "Noch kein Abstract – „Abstracts schreiben“ klicken oder selbst eintragen";
+  ab.oninput = () => { a.abstract = ab.value; };
+  box.append(kopf2, ab);
+  rechts.append(link, meta, kopf1, ta, box);
   el.append(cb, rechts);
   return el;
 }
@@ -206,12 +229,13 @@ function zaehlen() {
   const n = artikel.filter(a => a.ausgewaehlt).length;
   $("zaehler").textContent = artikel.length ? `${n} von ${artikel.length} Meldungen ausgewählt` : "";
   $("texBtn").disabled = !n;
+  $("abstractBtn").disabled = !n;
   $("pdfBtn").disabled = !n || !config.compiler;
 }
 
 function nutzlast() {
   return { titel: $("titel").value, untertitel: $("untertitel").value, ausgabe: $("ausgabe").value,
-           vorlage: $("vorlage").value, editorial: $("editorial").value,
+           vorlage: $("vorlage").value, editorial: $("editorial").value, teaser: $("teaser").checked,
            artikel: artikel.filter(a => a.ausgewaehlt) };
 }
 
@@ -238,6 +262,35 @@ async function exportieren(art) {
   } finally { zaehlen(); }
 }
 
+async function abstractsSchreiben() {
+  const ziel = artikel.filter(a => a.ausgewaehlt && (!$("nurLeere").checked || !(a.abstract || "").trim()));
+  if (!ziel.length) { $("abstractStatus").textContent = "Keine Meldungen ohne Abstract ausgewählt."; return; }
+  $("abstractBtn").disabled = true;
+  const ki = $("mitKi").checked;
+  // in Paketen abarbeiten, damit der Fortschritt sichtbar ist
+  const paket = 4; let fertig = 0, hinweise = 0;
+  try {
+    for (let i = 0; i < ziel.length; i += paket) {
+      $("abstractStatus").textContent = `Schreibe Abstracts … ${fertig}/${ziel.length}` + (ki ? " (liest Originalseiten, fragt Claude)" : "");
+      const teil = ziel.slice(i, i + paket);
+      const r = await fetch("/api/abstracts", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ artikel: teil, ki }) });
+      const d = await r.json();
+      for (const a of teil) {
+        const e = d.abstracts[a.id]; if (!e) continue;
+        a.abstract = e.abstract; a.methode = e.methode; a.hinweis = e.hinweis;
+        if (e.hinweis) hinweise++;
+      }
+      fertig += teil.length;
+      zeichnen();
+    }
+    $("abstractStatus").textContent = `${fertig} Abstracts geschrieben` + (hinweise ? ` – ${hinweise} mit Hinweis (Maus über die Markierung)` : "") + ". Bitte kurz gegenlesen.";
+  } catch (e) {
+    $("abstractStatus").textContent = "Fehler: " + e;
+  } finally { zaehlen(); }
+}
+
+$("abstractBtn").onclick = abstractsSchreiben;
 $("suchen").onclick = suchen;
 $("alleQuellen").onclick = () => {
   const boxen = [...$("quellen").querySelectorAll("input")]; const an = !boxen.every(b => b.checked);

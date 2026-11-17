@@ -81,7 +81,14 @@ def datum_deutsch(iso: str | None) -> str:
     return f"{d.day}.\\,{d.month}.\\,{d.year}"
 
 
-def inhalt_erzeugen(artikel: list[dict], rubriken: list[dict]) -> str:
+def artikel_tex(a: dict, teaser: bool = True) -> str:
+    return "\\artikel{%s}{%s}{%s}{%s}{%s}{%s}{%s}\n" % (
+        tex(a.get("titel")), tex(a.get("quelle")), datum_deutsch(a.get("datum")),
+        tex_url(a.get("link")), tex(a.get("autoren")),
+        tex(a.get("text")) if teaser else "", tex(a.get("abstract")))
+
+
+def inhalt_erzeugen(artikel: list[dict], rubriken: list[dict], teaser: bool = True) -> str:
     teile = []
     for r in rubriken:
         liste = [a for a in artikel if a.get("rubrik") == r["id"]]
@@ -89,11 +96,7 @@ def inhalt_erzeugen(artikel: list[dict], rubriken: list[dict]) -> str:
             continue
         teile.append(f"\\rubrik{{{tex(r['titel'])}}}\n")
         for a in liste:
-            teile.append(
-                "\\artikel{%s}{%s}{%s}{%s}{%s}{%s}\n" % (
-                    tex(a.get("titel")), tex(a.get("quelle")), datum_deutsch(a.get("datum")),
-                    tex_url(a.get("link")), tex(a.get("autoren")), tex(a.get("text")),
-                ))
+            teile.append(artikel_tex(a, teaser))
         teile.append("\\rubrikende\n")
     # Artikel mit unbekannter Rubrik nicht verlieren
     bekannte = {r["id"] for r in rubriken}
@@ -101,15 +104,14 @@ def inhalt_erzeugen(artikel: list[dict], rubriken: list[dict]) -> str:
     if rest:
         teile.append("\\rubrik{Weitere Meldungen}\n")
         for a in rest:
-            teile.append("\\artikel{%s}{%s}{%s}{%s}{%s}{%s}\n" % (
-                tex(a.get("titel")), tex(a.get("quelle")), datum_deutsch(a.get("datum")),
-                tex_url(a.get("link")), tex(a.get("autoren")), tex(a.get("text"))))
+            teile.append(artikel_tex(a, teaser))
         teile.append("\\rubrikende\n")
     return "\n".join(teile)
 
 
 def tex_erzeugen(vorlage: str, artikel: list[dict], rubriken: list[dict], titel: str,
-                 untertitel: str = "", ausgabe: str = "", editorial: str = "") -> str:
+                 untertitel: str = "", ausgabe: str = "", editorial: str = "",
+                 teaser: bool = True) -> str:
     heute = dt.date.today()
     editorial_tex = ""
     if editorial.strip():
@@ -122,7 +124,7 @@ def tex_erzeugen(vorlage: str, artikel: list[dict], rubriken: list[dict], titel:
         "<<DATUM>>": f"{heute.day}.~{MONATE[heute.month - 1]} {heute.year}",
         "<<ANZAHL>>": str(len(artikel)),
         "<<EDITORIAL>>": editorial_tex,
-        "<<INHALT>>": inhalt_erzeugen(artikel, rubriken),
+        "<<INHALT>>": inhalt_erzeugen(artikel, rubriken, teaser),
     }
     zeilen = []
     for zeile in vorlage.splitlines(keepends=True):

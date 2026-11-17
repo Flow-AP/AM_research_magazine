@@ -1,0 +1,2 @@
+# Optional: KI-Abstracts mit Claude (ohne dieses Paket werden Textauszüge verwendet)
+anthropic>=2.10
