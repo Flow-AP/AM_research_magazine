@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AM-Magazin</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --karte: #fff; --text: #1f2933; --leise: #6b7280; --linie: #e2e5ea;
+    --blau: #0b4f6c; --akzent: #e4572e; --gruen: #2f855a; --rot: #c53030;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #14181d; --karte: #1d232a; --text: #e5e9ee; --leise: #98a2ae; --linie: #2e3640;
+            --blau: #6cb4d4; --akzent: #f07c5a; --gruen: #68d391; --rot: #fc8181; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); }
+  header { background: var(--blau); color: #fff; padding: 18px 24px; }
+  @media (prefers-color-scheme: dark) { header { background: #0b3446; } }
+  header h1 { margin: 0; font-size: 22px; } header p { margin: 2px 0 0; opacity: .8; font-size: 14px; }
+  main { max-width: 1150px; margin: 0 auto; padding: 20px 16px 80px; display: grid; gap: 18px; }
+  section { background: var(--karte); border: 1px solid var(--linie); border-radius: 10px; padding: 16px 18px; }
+  h2 { margin: 0 0 12px; font-size: 16px; color: var(--blau); }
+  .raster { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; }
+  label { display: block; font-size: 13px; color: var(--leise); }
+  input[type=text], input[type=number], select, textarea {
+    width: 100%; margin-top: 3px; padding: 7px 9px; font: inherit; color: var(--text);
+    background: var(--bg); border: 1px solid var(--linie); border-radius: 6px; }
+  textarea { resize: vertical; }
+  .quellen { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 4px 14px; margin-top: 10px; }
+  .quellen label { color: var(--text); font-size: 14px; display: flex; gap: 6px; align-items: center; }
+  .typ { font-size: 11px; color: var(--leise); border: 1px solid var(--linie); border-radius: 4px; padding: 0 4px; }
+  button { font: inherit; padding: 8px 16px; border-radius: 6px; border: 1px solid var(--blau); background: var(--blau); color: #fff; cursor: pointer; }
+  button.zweit { background: transparent; color: var(--blau); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  .leiste { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 14px; }
+  .status { color: var(--leise); font-size: 14px; }
+  .fehler { color: var(--rot); font-size: 13px; margin: 6px 0 0; padding-left: 18px; }
+  .rubrik { margin-top: 18px; } .rubrik h3 { margin: 0 0 8px; font-size: 15px; border-bottom: 2px solid var(--akzent); padding-bottom: 4px; }
+  .artikel { display: grid; grid-template-columns: 22px 1fr; gap: 4px 10px; padding: 10px 0; border-bottom: 1px solid var(--linie); }
+  .artikel.aus { opacity: .45; }
+  .artikel a { color: var(--text); font-weight: 600; text-decoration: none; } .artikel a:hover { text-decoration: underline; }
+  .meta { font-size: 13px; color: var(--leise); display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; }
+  .meta select { width: auto; margin: 0; padding: 2px 6px; font-size: 13px; }
+  .artikel textarea { font-size: 13px; min-height: 64px; }
+  pre { white-space: pre-wrap; font-size: 12px; max-height: 260px; overflow: auto; background: var(--bg); padding: 10px; border-radius: 6px; }
+  .leer { color: var(--leise); font-style: italic; }
+</style>
+</head>
+<body>
+<header>
+  <h1>AM-Magazin</h1>
+  <p>Neuigkeiten aus der additiven Fertigung sammeln, auswählen und als LaTeX/PDF ausgeben</p>
+</header>
+<main>
+  <section>
+    <h2>1 · Suche</h2>
+    <div class="raster">
+      <label>Zeitraum (Tage)<input type="number" id="tage" min="1" max="90" value="7"></label>
+      <label>Max. Meldungen pro Quelle<input type="number" id="max" min="1" max="50" value="10"></label>
+      <label>Länge der Zusammenfassung (Zeichen)<input type="number" id="zeichen" min="150" max="3000" step="50" value="700"></label>
+      <label>Nur mit Begriffen (optional, kommagetrennt)<input type="text" id="filter" placeholder="z. B. LPBF, Titan, Formnext"></label>
+    </div>
+    <div class="quellen" id="quellen"></div>
+    <div class="leiste">
+      <button id="suchen">Netz durchsuchen</button>
+      <button class="zweit" id="alleQuellen">Alle Quellen an/aus</button>
+      <span class="status" id="suchStatus"></span>
+    </div>
+    <ul class="fehler" id="fehler"></ul>
+  </section>
+
+  <section>
+    <h2>2 · Auswahl</h2>
+    <div class="leiste" style="margin-top:0">
+      <button class="zweit" id="alleAn">Alle auswählen</button>
+      <button class="zweit" id="alleAus">Keine auswählen</button>
+      <span class="status" id="zaehler"></span>
+    </div>
+    <div id="ergebnisse"><p class="leer">Noch keine Suche durchgeführt.</p></div>
+  </section>
+
+  <section>
+    <h2>3 · Ausgabe</h2>
+    <div class="raster">
+      <label>Titel<input type="text" id="titel" value="AM Research Magazine"></label>
+      <label>Untertitel<input type="text" id="untertitel" value="Neues aus der additiven Fertigung"></label>
+      <label>Ausgabe<input type="text" id="ausgabe"></label>
+      <label>Vorlage<select id="vorlage"></select></label>
+    </div>
+    <label style="margin-top:12px">Editorial (optional, Leerzeile = neuer Absatz)<textarea id="editorial" rows="3"></textarea></label>
+    <div class="leiste">
+      <button id="texBtn" disabled>TeX-Datei herunterladen</button>
+      <button id="pdfBtn" disabled>PDF erzeugen</button>
+      <span class="status" id="ausgabeStatus"></span>
+    </div>
+    <pre id="log" hidden></pre>
+  </section>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let config = null;
+let artikel = [];
+
+const speicher = {
+  lesen(k, d) { try { const v = localStorage.getItem("am-" + k); return v === null ? d : JSON.parse(v); } catch { return d; } },
+  schreiben(k, v) { try { localStorage.setItem("am-" + k, JSON.stringify(v)); } catch {} },
+};
+
+function kw() {
+  const d = new Date(); const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  t.setUTCDate(t.getUTCDate() + 4 - (t.getUTCDay() || 7));
+  const j = new Date(Date.UTC(t.getUTCFullYear(), 0, 1));
+  return `KW ${Math.ceil(((t - j) / 864e5 + 1) / 7)}/${t.getUTCFullYear()}`;
+}
+
+function datum(iso) {
+  if (!iso) return "ohne Datum";
+  return new Date(iso).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" });
+}
+
+async function init() {
+  config = await (await fetch("/api/config")).json();
+  const gewaehlt = speicher.lesen("quellen", null);
+  $("quellen").innerHTML = "";
+  for (const q of config.quellen) {
+    const an = gewaehlt ? gewaehlt.includes(q.id) : q.aktiv !== false;
+    const l = document.createElement("label");
+    l.innerHTML = `<input type="checkbox" value="${q.id}" ${an ? "checked" : ""}> <span></span> <span class="typ">${q.typ}</span>`;
+    l.children[1].textContent = q.name;
+    $("quellen").append(l);
+  }
+  $("vorlage").innerHTML = config.vorlagen.map(v => `<option>${v}</option>`).join("");
+  for (const id of ["tage", "max", "zeichen", "filter", "titel", "untertitel", "vorlage"]) {
+    const v = speicher.lesen(id, null); if (v !== null) $(id).value = v;
+    $(id).addEventListener("change", () => speicher.schreiben(id, $(id).value));
+  }
+  $("ausgabe").value = kw();
+  if (!config.compiler) {
+    $("pdfBtn").title = "Kein LaTeX gefunden – bitte TeX Live/MiKTeX installieren oder die TeX-Datei z. B. in Overleaf übersetzen.";
+  }
+}
+
+function gewaehlteQuellen() {
+  return [...$("quellen").querySelectorAll("input:checked")].map(i => i.value);
+}
+
+async function suchen() {
+  const qs = gewaehlteQuellen();
+  speicher.schreiben("quellen", qs);
+  if (!qs.length) { $("suchStatus").textContent = "Bitte mindestens eine Quelle wählen."; return; }
+  $("suchen").disabled = true;
+  $("suchStatus").textContent = `Durchsuche ${qs.length} Quellen …`;
+  $("fehler").innerHTML = "";
+  try {
+    const r = await fetch("/api/suche", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ quellen: qs, tage: +$("tage").value, max_pro_quelle: +$("max").value,
+                             max_zeichen: +$("zeichen").value, filter: $("filter").value }) });
+    const d = await r.json();
+    artikel = d.artikel.map(a => ({ ...a, ausgewaehlt: true }));
+    for (const f of d.fehler) {
+      const li = document.createElement("li"); li.textContent = `${f.quelle}: ${f.meldung}`; $("fehler").append(li);
+    }
+    $("suchStatus").textContent = `${artikel.length} Meldungen gefunden` + (d.fehler.length ? `, ${d.fehler.length} Quelle(n) nicht erreichbar` : "");
+    zeichnen();
+  } catch (e) {
+    $("suchStatus").textContent = "Fehler bei der Suche: " + e;
+  } finally { $("suchen").disabled = false; }
+}
+
+function zeichnen() {
+  const ziel = $("ergebnisse"); ziel.innerHTML = "";
+  if (!artikel.length) { ziel.innerHTML = '<p class="leer">Keine Meldungen im gewählten Zeitraum.</p>'; }
+  for (const r of config.rubriken) {
+    const liste = artikel.filter(a => a.rubrik === r.id);
+    if (!liste.length) continue;
+    const box = document.createElement("div"); box.className = "rubrik";
+    const h = document.createElement("h3"); h.textContent = `${r.titel} (${liste.length})`; box.append(h);
+    for (const a of liste) box.append(karte(a));
+    ziel.append(box);
+  }
+  zaehlen();
+}
+
+function karte(a) {
+  const el = document.createElement("div");
+  el.className = "artikel" + (a.ausgewaehlt ? "" : " aus");
+  const cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = a.ausgewaehlt;
+  cb.onchange = () => { a.ausgewaehlt = cb.checked; el.classList.toggle("aus", !cb.checked); zaehlen(); };
+  const rechts = document.createElement("div");
+  const link = document.createElement("a"); link.href = a.link; link.target = "_blank"; link.rel = "noopener"; link.textContent = a.titel;
+  const meta = document.createElement("div"); meta.className = "meta";
+  const info = document.createElement("span"); info.textContent = `${a.quelle} · ${datum(a.datum)}` + (a.autoren ? ` · ${a.autoren}` : "");
+  const sel = document.createElement("select");
+  sel.innerHTML = config.rubriken.map(r => `<option value="${r.id}" ${r.id === a.rubrik ? "selected" : ""}>${r.titel}</option>`).join("");
+  sel.onchange = () => { a.rubrik = sel.value; zeichnen(); };
+  meta.append(info, sel);
+  const ta = document.createElement("textarea"); ta.value = a.text; ta.oninput = () => { a.text = ta.value; };
+  rechts.append(link, meta, ta);
+  el.append(cb, rechts);
+  return el;
+}
+
+function zaehlen() {
+  const n = artikel.filter(a => a.ausgewaehlt).length;
+  $("zaehler").textContent = artikel.length ? `${n} von ${artikel.length} Meldungen ausgewählt` : "";
+  $("texBtn").disabled = !n;
+  $("pdfBtn").disabled = !n || !config.compiler;
+}
+
+function nutzlast() {
+  return { titel: $("titel").value, untertitel: $("untertitel").value, ausgabe: $("ausgabe").value,
+           vorlage: $("vorlage").value, editorial: $("editorial").value,
+           artikel: artikel.filter(a => a.ausgewaehlt) };
+}
+
+async function exportieren(art) {
+  const btn = $(art + "Btn"); btn.disabled = true; $("log").hidden = true;
+  $("ausgabeStatus").textContent = art === "pdf" ? "LaTeX läuft … (kann einige Sekunden dauern)" : "Erzeuge TeX …";
+  try {
+    const r = await fetch("/api/" + art, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(nutzlast()) });
+    if (!r.ok) {
+      const d = await r.json().catch(() => ({}));
+      $("ausgabeStatus").textContent = d.fehler || "Fehler beim Erzeugen.";
+      if (d.log) { $("log").textContent = d.log; $("log").hidden = false; }
+      return;
+    }
+    const blob = await r.blob();
+    const name = decodeURIComponent((r.headers.get("Content-Disposition") || "").split("''")[1] || "magazin." + art);
+    const url = URL.createObjectURL(blob);
+    if (art === "pdf") window.open(url, "_blank");
+    const a = document.createElement("a"); a.href = url; a.download = name; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    $("ausgabeStatus").textContent = `${name} erstellt (auch im Ordner „ausgaben/“ gespeichert).`;
+  } catch (e) {
+    $("ausgabeStatus").textContent = "Fehler: " + e;
+  } finally { zaehlen(); }
+}
+
+$("suchen").onclick = suchen;
+$("alleQuellen").onclick = () => {
+  const boxen = [...$("quellen").querySelectorAll("input")]; const an = !boxen.every(b => b.checked);
+  boxen.forEach(b => b.checked = an);
+};
+$("alleAn").onclick = () => { artikel.forEach(a => a.ausgewaehlt = true); zeichnen(); };
+$("alleAus").onclick = () => { artikel.forEach(a => a.ausgewaehlt = false); zeichnen(); };
+$("texBtn").onclick = () => exportieren("tex");
+$("pdfBtn").onclick = () => exportieren("pdf");
+init();
+</script>
+</body>
+</html>

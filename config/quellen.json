@@ -1,0 +1,36 @@
+{
+  "_hinweis": "Quellen und Rubriken für das AM-Magazin. typ: rss | arxiv | crossref. rubrik: 'auto' = per Schlagwort einsortieren, sonst feste Rubrik-ID.",
+  "quellen": [
+    {"id": "3dprint",       "name": "3DPrint.com",            "typ": "rss", "url": "https://3dprint.com/feed/",             "rubrik": "auto", "aktiv": true},
+    {"id": "3dpi",          "name": "3D Printing Industry",   "typ": "rss", "url": "https://3dprintingindustry.com/feed/",  "rubrik": "auto", "aktiv": true},
+    {"id": "voxelmatters",  "name": "VoxelMatters",           "typ": "rss", "url": "https://www.voxelmatters.com/feed/",    "rubrik": "auto", "aktiv": true},
+    {"id": "3druck",        "name": "3Druck.com",             "typ": "rss", "url": "https://3druck.com/feed/",              "rubrik": "auto", "aktiv": true},
+    {"id": "tct",           "name": "TCT Magazine",           "typ": "rss", "url": "https://www.tctmagazine.com/rss",       "rubrik": "auto", "aktiv": false},
+    {"id": "fabbaloo",      "name": "Fabbaloo",               "typ": "rss", "url": "https://www.fabbaloo.com/feed",         "rubrik": "auto", "aktiv": false},
+
+    {"id": "arxiv", "name": "arXiv (Preprints)", "typ": "arxiv",
+     "suche": "all:\"additive manufacturing\" OR all:\"powder bed fusion\" OR all:\"directed energy deposition\" OR all:\"binder jetting\" OR all:\"wire arc additive\"",
+     "rubrik": "forschung", "aktiv": true},
+
+    {"id": "j-am",    "name": "Additive Manufacturing (Elsevier)",        "typ": "crossref", "issn": "2214-8604", "rubrik": "forschung", "aktiv": true},
+    {"id": "j-aml",   "name": "Additive Manufacturing Letters",           "typ": "crossref", "issn": "2772-3690", "rubrik": "forschung", "aktiv": true},
+    {"id": "j-rpj",   "name": "Rapid Prototyping Journal",                "typ": "crossref", "issn": "1355-2546", "rubrik": "forschung", "aktiv": true},
+    {"id": "j-vpp",   "name": "Virtual and Physical Prototyping",         "typ": "crossref", "issn": "1745-2759", "rubrik": "forschung", "aktiv": true},
+    {"id": "j-pam",   "name": "Progress in Additive Manufacturing",       "typ": "crossref", "issn": "2363-9512", "rubrik": "forschung", "aktiv": true},
+    {"id": "j-3dp",   "name": "3D Printing and Additive Manufacturing",   "typ": "crossref", "issn": "2329-7662", "rubrik": "forschung", "aktiv": false}
+  ],
+
+  "rubriken": [
+    {"id": "forschung",  "titel": "Forschung & Wissenschaft",
+     "schlagworte": ["study", "researchers", "university", "paper", "journal", "institute", "fraunhofer", "phd", "laboratory", "lab ", "simulation", "microstructure", "forscher", "studie", "hochschule", "universität"]},
+    {"id": "maschinen",  "titel": "Neue Maschinen & Systeme",
+     "schlagworte": ["printer", "launches", "unveils", "new system", "machine", "release", "debuts", "introduces", "lpbf system", "drucker", "neue anlage", "stellt vor", "formnext"]},
+    {"id": "materialien", "titel": "Materialien & Prozesse",
+     "schlagworte": ["material", "powder", "alloy", "resin", "filament", "polymer", "titanium", "aluminum", "copper", "ceramic", "pulver", "legierung", "werkstoff"]},
+    {"id": "hersteller", "titel": "Hersteller & Industrie",
+     "schlagworte": ["acquires", "acquisition", "partnership", "partners", "funding", "raises", "investment", "revenue", "earnings", "ceo", "merger", "contract", "übernahme", "partnerschaft", "finanzierung"]},
+    {"id": "trends",     "titel": "Trends & Markt",
+     "schlagworte": ["market", "trend", "report", "forecast", "survey", "outlook", "sustainability", "markt", "prognose"]}
+  ],
+  "standard_rubrik": "trends"
+}

@@ -1,0 +1,102 @@
+% =============================================================================
+%  AM-Magazin – Standardvorlage
+%
+%  Platzhalter (werden vom Programm ersetzt):
+%    <<TITEL>> <<UNTERTITEL>> <<AUSGABE>> <<DATUM>> <<ANZAHL>>
+%    <<EDITORIAL>>  -> \editorial{...} oder leer
+%    <<INHALT>>     -> Folge von \rubrik{..} \artikel{..}... \rubrikende
+%
+%  Eine eigene Vorlage muss nur diese Makros definieren:
+%    \rubrik{Titel}            Beginn einer Rubrik
+%    \rubrikende               Ende einer Rubrik
+%    \artikel{Titel}{Quelle}{Datum}{URL}{Autoren}{Text}
+%    \editorial{Text}
+% =============================================================================
+\documentclass[a4paper,10pt]{scrartcl}
+
+\usepackage[T1]{fontenc}
+\usepackage[ngerman]{babel}
+% Vektorschrift + Mikrotypografie, falls installiert
+\IfFileExists{lmodern.sty}{\usepackage{lmodern}\usepackage{microtype}}{}
+\usepackage[a4paper,margin=18mm,top=22mm,bottom=22mm]{geometry}
+\usepackage[dvipsnames]{xcolor}
+\usepackage{multicol}
+\usepackage{scrlayer-scrpage}
+\usepackage[hidelinks]{hyperref}
+
+\definecolor{amblau}{HTML}{0B4F6C}
+\definecolor{amakzent}{HTML}{E4572E}
+\definecolor{amgrau}{HTML}{6B7280}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0pt}
+\setlength{\columnsep}{7mm}
+\raggedcolumns
+
+% Kopf- und Fußzeile
+\pagestyle{scrheadings}
+\clearpairofpagestyles
+\ihead{\small\color{amgrau}<<TITEL>>}
+\ohead{\small\color{amgrau}<<AUSGABE>>}
+\ofoot{\small\pagemark}
+\setkomafont{pagehead}{\normalfont}
+
+% ---------------------------------------------------------------- Makros
+\newcommand{\rubrik}[1]{%
+  \par\needspace{12\baselineskip}\bigskip
+  {\color{amakzent}\rule{\linewidth}{1.2pt}}\par\smallskip
+  {\sffamily\Large\bfseries\color{amblau}#1\par}%
+  \addcontentsline{toc}{section}{#1}%
+  \medskip
+  \begin{multicols}{2}%
+}
+\newcommand{\rubrikende}{\end{multicols}}
+
+\newcommand{\artikel}[6]{%
+  \par\noindent\begin{minipage}[t]{\linewidth}%
+  {\sffamily\bfseries\color{amblau}#1\par}\nopagebreak[4]\vspace{1pt}%
+  {\footnotesize\sffamily\color{amgrau}#2%
+    \if\relax\detokenize{#3}\relax\else\ \textbullet\ #3\fi\par}%
+  \if\relax\detokenize{#5}\relax\else{\footnotesize\itshape\color{amgrau}#5\par}\fi
+  \vspace{3pt}%
+  {\small #6\par}\vspace{2pt}%
+  {\footnotesize\sffamily\href{#4}{\color{amakzent}$\rightarrow$\ Zur Quelle}\par}%
+  \vspace{6pt}{\color{amgrau!30}\rule{\linewidth}{0.4pt}}%
+  \end{minipage}\par\vspace{8pt}%
+}
+
+\newcommand{\editorial}[1]{%
+  \begin{center}
+  \colorbox{amblau!7}{\parbox{0.94\linewidth}{\vspace{6pt}%
+    {\sffamily\bfseries\color{amblau}Editorial\par}\smallskip
+    \small #1\par\vspace{6pt}}}%
+  \end{center}
+}
+
+\IfFileExists{needspace.sty}{\usepackage{needspace}}{\providecommand{\needspace}[1]{}}
+
+% ================================================================ Dokument
+\begin{document}
+
+% ---- Titelblock
+\thispagestyle{empty}
+{\color{amblau}\rule{\linewidth}{3pt}}\par\medskip
+{\sffamily\fontsize{30}{34}\selectfont\bfseries\color{amblau}<<TITEL>>\par}
+\smallskip
+{\sffamily\large\color{amgrau}<<UNTERTITEL>>\par}
+\medskip
+{\sffamily\small\color{amakzent}<<AUSGABE>>\hfill<<DATUM>>\hfill <<ANZAHL>> Meldungen\par}
+{\color{amblau}\rule{\linewidth}{0.8pt}}\par
+\bigskip
+
+<<EDITORIAL>>
+
+{\sffamily\small\setcounter{tocdepth}{1}\renewcommand{\contentsname}{In dieser Ausgabe}\tableofcontents}
+
+<<INHALT>>
+
+\vfill
+{\footnotesize\color{amgrau}Automatisch zusammengestellt aus öffentlichen Quellen. Zusammenfassungen
+stammen aus den jeweiligen Originalmeldungen; alle Rechte bei den Urhebern.\par}
+
+\end{document}
