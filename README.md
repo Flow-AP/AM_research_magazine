@@ -56,7 +56,11 @@ So entsteht der Abstract zu jeder Meldung:
 
 An jedem Abstract zeigt eine Markierung, wie er entstanden ist, zum Beispiel „KI (Volltext)“ oder „Auszug (Teaser)“.
 Die KI-Abstracts solltest du kurz gegenlesen, bevor das Heft rausgeht.
-Jeder Abstract ist ein API-Aufruf: Die Kosten richten sich nach der Zahl der Meldungen, pro Ausgabe meist nur wenige Cent.
+Jeder Abstract ist ein API-Aufruf. Grobe Kosten mit `claude-opus-5-5`: etwa 1–2 US-Cent pro Abstract,
+also rund 0,50–2 $ für eine Ausgabe mit 40–100 Meldungen.
+Deutlich günstiger, mit etwas schlichteren Texten, ist Haiku:
+`export AM_MAGAZIN_MODELL=claude-haiku-5-5`. Das kostet weniger als 0,05 $ pro Ausgabe.
+Mit „nur fehlende“ werden bereits vorhandene Abstracts nicht noch einmal bezahlt.
 
 ## Quellen
 

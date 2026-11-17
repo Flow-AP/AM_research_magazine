@@ -18,6 +18,9 @@ from html.parser import HTMLParser
 from .quellen import abrufen, html_zu_text, kuerzen
 
 MODELL = os.environ.get("AM_MAGAZIN_MODELL", "claude-opus-5-5")
+# Modelle, die den serverseitigen Ersatzmodell-Mechanismus unterstützen (Haiku z. B. nicht)
+MODELLE_MIT_FALLBACK = {"claude-opus-5-5", "claude-opus-5", "claude-sonnet-5-5",
+                        "claude-fable-5-1", "claude-fable-5-2"}
 MAX_VOLLTEXT = 12000  # Zeichen, die an das Modell gehen
 
 SYSTEM_PROMPT = """Du schreibst Kurz-Abstracts für ein deutschsprachiges Fachmagazin zur additiven Fertigung.
@@ -142,15 +145,17 @@ def abstract_ki(artikel: dict, text: str) -> str:
               f"Quelle: {artikel.get('quelle', '')}\n"
               f"Autoren: {artikel.get('autoren', '') or 'unbekannt'}\n\n"
               f"Text der Meldung:\n{text}")
+    extra = {}
+    if MODELL in MODELLE_MIT_FALLBACK:
+        # Lehnt das Modell eine Anfrage ab, übernimmt automatisch ein passendes Ersatzmodell.
+        extra = {"betas": ["server-side-fallback-2026-07-01"], "fallbacks": "default"}
     antwort = client.beta.messages.create(
         model=MODELL,
         max_tokens=4000,
         output_config={"effort": "low"},
-        # Lehnt das Modell eine Anfrage ab, übernimmt automatisch ein passendes Ersatzmodell.
-        betas=["server-side-fallback-2026-07-01"],
-        fallbacks="default",
         system=SYSTEM_PROMPT,
         messages=[{"role": "user", "content": nutzer}],
+        **extra,
     )
     if antwort.stop_reason == "refusal":
         raise anthropic.AnthropicError("Anfrage vom Modell abgelehnt")
