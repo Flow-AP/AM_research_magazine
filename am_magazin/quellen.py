@@ -8,6 +8,7 @@ import email.utils
 import hashlib
 import html
 import json
+import os
 import re
 import urllib.parse
 import urllib.request
@@ -175,9 +176,58 @@ def lade_feed(quelle: dict, max_anzahl: int) -> list[dict]:
     return ergebnis[:max_anzahl]
 
 
-def lade_arxiv(quelle: dict, max_anzahl: int) -> list[dict]:
+# --------------------------------------------------------------------------- Werkstoffbereich
+
+def werkstoff_suchklausel(begriffe: list[str], stil: str) -> str:
+    """Baut aus Suchbegriffen eine ODER-Klausel im Stil der jeweiligen Such-API."""
+    if not begriffe:
+        return ""
+    if stil == "arxiv":
+        return "(" + " OR ".join(f'all:"{b}"' for b in begriffe) + ")"
+    if stil == "crossref":  # Crossref kennt keine Booleschen Operatoren, nur Relevanz
+        return " ".join(begriffe)
+    return "(" + " OR ".join(f'"{b}"' for b in begriffe) + ")"  # OpenAlex, Google Scholar
+
+
+_muster_cache: dict[str, list[re.Pattern]] = {}
+
+
+def _ist_kuerzel(wort: str) -> bool:
+    """Abkürzungen wie ABS, PLA, SLM, PBF-LB/M: nur in exakter Großschreibung zählen."""
+    buchstaben = [c for c in wort if c.isalpha()]
+    return bool(buchstaben) and all(c.isupper() for c in buchstaben) and len(wort) <= 10
+
+
+def _muster(schlagworte: list[str]) -> list[re.Pattern]:
+    schluessel = "|".join(schlagworte)
+    if schluessel not in _muster_cache:
+        kuerzel = [re.escape(w.strip()) for w in schlagworte if w.strip() and _ist_kuerzel(w.strip())]
+        woerter = [re.escape(w.strip()) for w in schlagworte if w.strip() and not _ist_kuerzel(w.strip())]
+        rahmen = r"(?<![\w-])({})(?![\w])"
+        muster = []
+        if woerter:
+            muster.append(re.compile(rahmen.format("|".join(woerter)), re.I))
+        if kuerzel:
+            muster.append(re.compile(rahmen.format("|".join(kuerzel))))
+        _muster_cache[schluessel] = muster
+    return _muster_cache[schluessel]
+
+
+def werkstoffe_erkennen(artikel: dict, werkstoffe: dict) -> list[str]:
+    """Liefert die IDs aller Werkstoffbereiche, deren Schlagworte im Artikel vorkommen."""
+    heu = " ".join([artikel.get("titel", ""), artikel.get("text", ""), " ".join(artikel.get("tags", []))])
+    return [wid for wid, w in werkstoffe.items()
+            if any(m.search(heu) for m in _muster(w.get("schlagworte", [])))]
+
+
+# --------------------------------------------------------------------------- Forschungsquellen
+
+def lade_arxiv(quelle: dict, max_anzahl: int, zusatz: list[str] | None = None) -> list[dict]:
+    anfrage = quelle["suche"]
+    if zusatz:
+        anfrage = f"({anfrage}) AND {werkstoff_suchklausel(zusatz, 'arxiv')}"
     params = urllib.parse.urlencode({
-        "search_query": quelle["suche"],
+        "search_query": anfrage,
         "sortBy": "submittedDate",
         "sortOrder": "descending",
         "max_results": max_anzahl,
@@ -196,14 +246,16 @@ def lade_arxiv(quelle: dict, max_anzahl: int) -> list[dict]:
     return ergebnis
 
 
-def lade_crossref(quelle: dict, max_anzahl: int, seit: dt.datetime) -> list[dict]:
+def lade_crossref(quelle: dict, max_anzahl: int, seit: dt.datetime,
+                  zusatz: list[str] | None = None) -> list[dict]:
     filter_ = [f"from-pub-date:{seit.date().isoformat()}", "type:journal-article"]
     params = {"rows": max_anzahl, "sort": "published", "order": "desc",
               "select": "title,URL,abstract,author,published,published-online,container-title,DOI"}
     if quelle.get("issn"):
         filter_.append(f"issn:{quelle['issn']}")
-    if quelle.get("suche"):
-        params["query.bibliographic"] = quelle["suche"]
+    anfrage = " ".join(x for x in [quelle.get("suche", ""), werkstoff_suchklausel(zusatz or [], "crossref")] if x)
+    if anfrage:
+        params["query.bibliographic"] = anfrage
     params["filter"] = ",".join(filter_)
     daten = json.loads(abrufen("https://api.crossref.org/works?" + urllib.parse.urlencode(params)))
     ergebnis = []
@@ -228,6 +280,97 @@ def lade_crossref(quelle: dict, max_anzahl: int, seit: dt.datetime) -> list[dict
     return ergebnis
 
 
+def _abstract_aus_index(index: dict | None) -> str:
+    """OpenAlex speichert Abstracts als invertierten Index {wort: [positionen]}."""
+    if not index:
+        return ""
+    woerter = {}
+    for wort, positionen in index.items():
+        for pos in positionen:
+            woerter[pos] = wort
+    return " ".join(woerter[i] for i in sorted(woerter))
+
+
+def lade_openalex(quelle: dict, max_anzahl: int, seit: dt.datetime,
+                  zusatz: list[str] | None = None) -> list[dict]:
+    anfrage = quelle["suche"]
+    if zusatz:
+        anfrage = f"({anfrage}) AND {werkstoff_suchklausel(zusatz, 'openalex')}"
+    params = {
+        "search": anfrage,
+        "filter": f"from_publication_date:{seit.date().isoformat()},type:article",
+        "sort": "publication_date:desc",
+        "per_page": min(max_anzahl, 200),
+        "select": "id,doi,display_name,publication_date,authorships,primary_location,abstract_inverted_index",
+    }
+    schluessel = os.environ.get("OPENALEX_API_KEY")
+    if schluessel:
+        params["api_key"] = schluessel
+    daten = json.loads(abrufen("https://api.openalex.org/works?" + urllib.parse.urlencode(params)))
+    ergebnis = []
+    for it in daten.get("results", []):
+        titel = it.get("display_name") or ""
+        if not titel:
+            continue
+        namen = [(au.get("author") or {}).get("display_name", "") for au in it.get("authorships", [])]
+        autoren = ", ".join(namen[:4]) + (" et al." if len(namen) > 4 else "")
+        datum = datum_parsen(it.get("publication_date"))
+        link = it.get("doi") or it.get("id", "")
+        a = _artikel(quelle, titel, link, datum, _abstract_aus_index(it.get("abstract_inverted_index")),
+                     autoren, typ="forschung")
+        journal = (((it.get("primary_location") or {}).get("source") or {}).get("display_name"))
+        if journal:
+            a["quelle"] = f"{journal} (via OpenAlex)"
+        ergebnis.append(a)
+    return ergebnis
+
+
+def scholar_link(anfrage: str) -> str:
+    """Link auf die Google-Scholar-Suche, nach Datum sortiert (zum Öffnen im Browser)."""
+    return "https://scholar.google.com/scholar?" + urllib.parse.urlencode({"q": anfrage, "scisbd": 1, "hl": "de"})
+
+
+def _scholar_datum(snippet: str, jetzt: dt.datetime) -> dt.datetime | None:
+    """Bei Sortierung nach Datum beginnt der Scholar-Snippet mit „3 days ago –“ bzw. „vor 3 Tagen –“."""
+    m = re.match(r"\s*(?:vor\s+)?(\d+)\s+(days?|Tag(?:en)?|hours?|Stunden?)", snippet or "", re.I)
+    if not m:
+        return None
+    n = int(m.group(1))
+    return jetzt - (dt.timedelta(hours=n) if m.group(2).lower().startswith(("h", "s")) else dt.timedelta(days=n))
+
+
+def lade_scholar(quelle: dict, max_anzahl: int, seit: dt.datetime,
+                 zusatz: list[str] | None = None) -> list[dict]:
+    """Google Scholar über SerpAPI (Google selbst bietet keine Schnittstelle)."""
+    schluessel = os.environ.get("SERPAPI_KEY")
+    if not schluessel:
+        raise RuntimeError("SERPAPI_KEY nicht gesetzt – Google Scholar benötigt einen SerpAPI-Schlüssel "
+                           "(siehe README). Alternativ den Button „In Google Scholar öffnen“ nutzen.")
+    anfrage = quelle["suche"]
+    if zusatz:
+        anfrage = f"{anfrage} {werkstoff_suchklausel(zusatz, 'scholar')}"
+    params = {"engine": "google_scholar", "q": anfrage, "api_key": schluessel, "hl": "en",
+              "scisbd": 2, "num": min(max_anzahl, 20), "as_ylo": seit.year}
+    daten = json.loads(abrufen("https://serpapi.com/search.json?" + urllib.parse.urlencode(params)))
+    if daten.get("error"):
+        raise RuntimeError(f"SerpAPI: {daten['error']}")
+    jetzt = dt.datetime.now(dt.timezone.utc)
+    ergebnis = []
+    for it in daten.get("organic_results", []):
+        snippet = it.get("snippet", "")
+        datum = _scholar_datum(snippet, jetzt)
+        text = re.sub(r"^\s*(?:vor\s+)?\d+\s+\S+\s+(?:ago\s+)?[-–—]\s*", "", snippet)
+        info = (it.get("publication_info") or {}).get("summary", "")
+        autoren = info.split(" - ")[0] if " - " in info else ""
+        a = _artikel(quelle, it.get("title", ""), it.get("link") or scholar_link(it.get("title", "")),
+                     datum, text, autoren, typ="forschung")
+        if " - " in info:
+            journal = re.sub(r",?\s*\d{4}\s*$", "", info.split(" - ")[1]).strip()
+            a["quelle"] = f"{journal or 'Google Scholar'} (via Google Scholar)"
+        ergebnis.append(a)
+    return ergebnis
+
+
 # --------------------------------------------------------------------------- Einordnung
 
 def rubrik_bestimmen(artikel: dict, rubriken: list[dict], standard: str) -> str:
@@ -247,21 +390,45 @@ def _normtitel(t: str) -> str:
 
 
 def suchen(config: dict, quellen_ids: list[str] | None = None, tage: int = 7,
-           max_pro_quelle: int = 15, filter_text: str = "", max_zeichen: int = 700) -> dict:
-    """Ruft alle gewählten Quellen parallel ab und liefert {'artikel': [...], 'fehler': [...]}."""
+           max_pro_quelle: int = 15, filter_text: str = "", max_zeichen: int = 700,
+           werkstoff: str = "alle", unklare_behalten: bool = False) -> dict:
+    """Ruft alle gewählten Quellen parallel ab und liefert {'artikel': [...], 'fehler': [...]}.
+
+    werkstoff: 'alle' oder eine ID aus config['werkstoffe'] (z. B. 'metall', 'kunststoff').
+    unklare_behalten: bei aktivem Werkstofffilter auch Meldungen ohne erkennbaren Werkstoff behalten.
+    """
     jetzt = dt.datetime.now(dt.timezone.utc)
     seit = jetzt - dt.timedelta(days=tage)
     quellen = [q for q in config["quellen"]
                if (quellen_ids is None and q.get("aktiv", True)) or (quellen_ids and q["id"] in quellen_ids)]
+    werkstoffe = config.get("werkstoffe", {})
+    if werkstoff not in werkstoffe:
+        werkstoff = "alle"
+    zusatz = werkstoffe[werkstoff].get("suchbegriffe", []) if werkstoff != "alle" else None
+    begriffe = [b.strip().lower() for b in re.split(r"[,;]", filter_text or "") if b.strip()]
 
     def lade(q):
         if q["typ"] == "rss":
-            return lade_feed(q, max_pro_quelle * 3)
+            return lade_feed(q, max_pro_quelle * 5)  # Feeds liefern ohnehin nur die letzten Meldungen
         if q["typ"] == "arxiv":
-            return lade_arxiv(q, max_pro_quelle * 2)
+            return lade_arxiv(q, max_pro_quelle * 2, zusatz)
         if q["typ"] == "crossref":
-            return lade_crossref(q, max_pro_quelle, seit)
+            return lade_crossref(q, max_pro_quelle * 2, seit, zusatz)
+        if q["typ"] == "openalex":
+            return lade_openalex(q, max_pro_quelle * 2, seit, zusatz)
+        if q["typ"] == "scholar":
+            return lade_scholar(q, max_pro_quelle, seit, zusatz)
         raise ValueError(f"Unbekannter Quellentyp: {q['typ']}")
+
+    def passt(a) -> bool:
+        a["werkstoffe"] = werkstoffe_erkennen(a, werkstoffe)
+        if begriffe and not any(b in (a["titel"] + " " + a["text"]).lower() for b in begriffe):
+            return False
+        if werkstoff != "alle":
+            if werkstoff in a["werkstoffe"]:
+                return True
+            return unklare_behalten and not a["werkstoffe"]
+        return True
 
     artikel, fehler = [], []
     with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
@@ -270,7 +437,7 @@ def suchen(config: dict, quellen_ids: list[str] | None = None, tage: int = 7,
             q = futures[fut]
             try:
                 liste = fut.result()
-            except Exception as e:  # Netzfehler, kaputter Feed …
+            except Exception as e:  # Netzfehler, kaputter Feed, fehlender Schlüssel …
                 fehler.append({"quelle": q["name"], "meldung": f"{type(e).__name__}: {e}"})
                 continue
             treffer = 0
@@ -278,23 +445,23 @@ def suchen(config: dict, quellen_ids: list[str] | None = None, tage: int = 7,
                 d = datum_parsen(a["datum"]) if a["datum"] else None
                 if d and d < seit:
                     continue
+                if not passt(a):  # Filter vor der Mengenbegrenzung anwenden
+                    continue
                 if treffer >= max_pro_quelle:
                     break
                 artikel.append(a)
                 treffer += 1
 
-    # Filter, Dubletten, Rubriken, Kürzen
-    begriffe = [b.strip().lower() for b in re.split(r"[,;]", filter_text or "") if b.strip()]
+    # Dubletten, Rubriken, Kürzen
     gesehen, ergebnis = set(), []
     for a in sorted(artikel, key=lambda x: x["datum"] or "", reverse=True):
         schluessel = _normtitel(a["titel"])
         if not schluessel or schluessel in gesehen:
-            continue
-        if begriffe and not any(b in (a["titel"] + " " + a["text"]).lower() for b in begriffe):
             continue
         gesehen.add(schluessel)
         a["rubrik"] = rubrik_bestimmen(a, config["rubriken"], config.get("standard_rubrik", "trends"))
         a["text"] = kuerzen(a["text"], max_zeichen)
         ergebnis.append(a)
 
-    return {"artikel": ergebnis, "fehler": fehler, "zeitpunkt": jetzt.isoformat(), "seit": seit.isoformat()}
+    return {"artikel": ergebnis, "fehler": fehler, "zeitpunkt": jetzt.isoformat(), "seit": seit.isoformat(),
+            "werkstoff": werkstoff}

@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import os
 import sys
 import threading
 import webbrowser
@@ -105,6 +106,9 @@ class Handler(BaseHTTPRequestHandler):
                 "vorlagen": vorlagen_liste(),
                 "compiler": latex.compiler_verfuegbar(),
                 "ki": abstract.ki_status(),
+                "werkstoffe": [{"id": k, "titel": w["titel"], "suchbegriffe": w.get("suchbegriffe", [])}
+                               for k, w in cfg.get("werkstoffe", {}).items()],
+                "serpapi": bool(os.environ.get("SERPAPI_KEY")),
             })
         else:
             self._senden(404, b"Nicht gefunden", "text/plain; charset=utf-8")
@@ -123,6 +127,8 @@ class Handler(BaseHTTPRequestHandler):
                 max_pro_quelle=int(daten.get("max_pro_quelle", 15)),
                 filter_text=daten.get("filter", ""),
                 max_zeichen=int(daten.get("max_zeichen", 700)),
+                werkstoff=daten.get("werkstoff", "alle"),
+                unklare_behalten=bool(daten.get("unklare_behalten", False)),
             )
             return self._json(ergebnis)
 
@@ -157,8 +163,10 @@ class Handler(BaseHTTPRequestHandler):
 
 def cli(args):
     cfg = config_laden()
-    print(f"Suche Meldungen der letzten {args.tage} Tage …")
-    erg = quellen.suchen(cfg, tage=args.tage, max_pro_quelle=args.max, filter_text=args.filter or "")
+    bereich = "" if args.werkstoff == "alle" else f" im Bereich {args.werkstoff}"
+    print(f"Suche Meldungen der letzten {args.tage} Tage{bereich} …")
+    erg = quellen.suchen(cfg, tage=args.tage, max_pro_quelle=args.max, filter_text=args.filter or "",
+                         werkstoff=args.werkstoff, unklare_behalten=args.unklare_behalten)
     for f in erg["fehler"]:
         print(f"  ! {f['quelle']}: {f['meldung']}")
     print(f"  {len(erg['artikel'])} Meldungen gefunden.")
@@ -188,6 +196,9 @@ def main():
     ap.add_argument("--cli", action="store_true", help="Ohne Oberfläche direkt eine Ausgabe erzeugen")
     ap.add_argument("--tage", type=int, default=7)
     ap.add_argument("--max", type=int, default=10, help="max. Meldungen pro Quelle")
+    ap.add_argument("--werkstoff", default="alle", help="alle | metall | kunststoff (IDs aus config/quellen.json)")
+    ap.add_argument("--unklare-behalten", action="store_true",
+                    help="bei --werkstoff auch Meldungen ohne erkennbaren Werkstoff behalten")
     ap.add_argument("--filter", help="nur Meldungen mit diesen Begriffen (kommagetrennt)")
     ap.add_argument("--titel", default="AM Research Magazine")
     ap.add_argument("--untertitel", default="Neues aus der additiven Fertigung")

@@ -46,6 +46,15 @@
   .feld { font-size: 12px; color: var(--leise); margin-top: 6px; display: flex; gap: 8px; align-items: center; }
   .marke { font-size: 11px; border-radius: 4px; padding: 0 5px; background: var(--bg); border: 1px solid var(--linie); }
   .abstract textarea { border-left: 3px solid var(--blau); }
+  .segment { display: inline-flex; border: 1px solid var(--blau); border-radius: 6px; overflow: hidden; margin-top: 3px; }
+  .segment label { margin: 0; color: var(--blau); font-size: 14px; }
+  .segment input { position: absolute; opacity: 0; pointer-events: none; }
+  .segment span { display: block; padding: 6px 14px; cursor: pointer; }
+  .segment input:checked + span { background: var(--blau); color: #fff; }
+  .segment input:focus-visible + span { outline: 2px solid var(--akzent); outline-offset: -2px; }
+  .ws { font-size: 11px; border-radius: 4px; padding: 0 6px; color: #fff; background: var(--leise); }
+  .ws.metall { background: #4a5d73; } .ws.kunststoff { background: #2f855a; }
+  a.knopf { display: inline-block; padding: 8px 16px; border-radius: 6px; border: 1px solid var(--blau); color: var(--blau); text-decoration: none; }
   .check { display: flex; gap: 6px; align-items: center; color: var(--text); font-size: 14px; }
   pre { white-space: pre-wrap; font-size: 12px; max-height: 260px; overflow: auto; background: var(--bg); padding: 10px; border-radius: 6px; }
   .leer { color: var(--leise); font-style: italic; }
@@ -65,10 +74,16 @@
       <label>Länge der Zusammenfassung (Zeichen)<input type="number" id="zeichen" min="150" max="3000" step="50" value="700"></label>
       <label>Nur mit Begriffen (optional, kommagetrennt)<input type="text" id="filter" placeholder="z. B. LPBF, Titan, Formnext"></label>
     </div>
+    <div class="leiste" style="margin-top:12px; gap: 18px">
+      <div><label>Werkstoffbereich</label>
+        <div class="segment" id="werkstoff" role="radiogroup" aria-label="Werkstoffbereich"></div></div>
+      <label class="check" style="align-self:flex-end"><input type="checkbox" id="unklare"> auch Meldungen ohne erkennbaren Werkstoff</label>
+    </div>
     <div class="quellen" id="quellen"></div>
     <div class="leiste">
       <button id="suchen">Netz durchsuchen</button>
       <button class="zweit" id="alleQuellen">Alle Quellen an/aus</button>
+      <a class="knopf" id="scholarLink" target="_blank" rel="noopener" title="Öffnet die passende Suche in Google Scholar, nach Datum sortiert">In Google Scholar öffnen ↗</a>
       <span class="status" id="suchStatus"></span>
     </div>
     <ul class="fehler" id="fehler"></ul>
@@ -140,8 +155,27 @@ async function init() {
     const l = document.createElement("label");
     l.innerHTML = `<input type="checkbox" value="${q.id}" ${an ? "checked" : ""}> <span></span> <span class="typ">${q.typ}</span>`;
     l.children[1].textContent = q.name;
+    if (q.typ === "scholar" && !config.serpapi) {
+      l.title = "Benötigt einen SerpAPI-Schlüssel (Umgebungsvariable SERPAPI_KEY), siehe README.";
+      l.children[1].textContent = q.name + " – Schlüssel fehlt";
+    }
     $("quellen").append(l);
   }
+  const optionen = [{ id: "alle", titel: "Alle" }, ...config.werkstoffe];
+  const gewaehlterWs = speicher.lesen("werkstoff", "alle");
+  $("werkstoff").innerHTML = "";
+  for (const w of optionen) {
+    const l = document.createElement("label");
+    l.innerHTML = `<input type="radio" name="werkstoff" value="${w.id}" ${w.id === gewaehlterWs ? "checked" : ""}><span></span>`;
+    l.querySelector("span").textContent = w.titel;
+    l.querySelector("input").onchange = () => { speicher.schreiben("werkstoff", w.id); scholarAktualisieren(); };
+    $("werkstoff").append(l);
+  }
+  if (!$("werkstoff").querySelector("input:checked")) $("werkstoff").querySelector("input").checked = true;
+  $("unklare").checked = speicher.lesen("unklare", false);
+  $("unklare").onchange = () => speicher.schreiben("unklare", $("unklare").checked);
+  $("filter").addEventListener("input", scholarAktualisieren);
+  scholarAktualisieren();
   $("vorlage").innerHTML = config.vorlagen.map(v => `<option>${v}</option>`).join("");
   for (const id of ["tage", "max", "zeichen", "filter", "titel", "untertitel", "vorlage"]) {
     const v = speicher.lesen(id, null); if (v !== null) $(id).value = v;
@@ -158,6 +192,20 @@ async function init() {
   }
 }
 
+function werkstoff() {
+  const el = $("werkstoff").querySelector("input:checked"); return el ? el.value : "alle";
+}
+
+function scholarAktualisieren() {
+  const scholar = config.quellen.find(q => q.typ === "scholar");
+  let q = scholar ? scholar.suche : '"additive manufacturing"';
+  const ws = config.werkstoffe.find(w => w.id === werkstoff());
+  if (ws) q += " (" + ws.suchbegriffe.map(b => `"${b}"`).join(" OR ") + ")";
+  const extra = $("filter").value.split(/[,;]/).map(b => b.trim()).filter(Boolean);
+  if (extra.length) q += " (" + extra.map(b => `"${b}"`).join(" OR ") + ")";
+  $("scholarLink").href = "https://scholar.google.com/scholar?" + new URLSearchParams({ q, scisbd: "1", hl: "de" });
+}
+
 function gewaehlteQuellen() {
   return [...$("quellen").querySelectorAll("input:checked")].map(i => i.value);
 }
@@ -172,7 +220,8 @@ async function suchen() {
   try {
     const r = await fetch("/api/suche", { method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ quellen: qs, tage: +$("tage").value, max_pro_quelle: +$("max").value,
-                             max_zeichen: +$("zeichen").value, filter: $("filter").value }) });
+                             max_zeichen: +$("zeichen").value, filter: $("filter").value,
+                             werkstoff: werkstoff(), unklare_behalten: $("unklare").checked }) });
     const d = await r.json();
     artikel = d.artikel.map(a => ({ ...a, ausgewaehlt: true }));
     for (const f of d.fehler) {
@@ -211,7 +260,12 @@ function karte(a) {
   const sel = document.createElement("select");
   sel.innerHTML = config.rubriken.map(r => `<option value="${r.id}" ${r.id === a.rubrik ? "selected" : ""}>${r.titel}</option>`).join("");
   sel.onchange = () => { a.rubrik = sel.value; zeichnen(); };
-  meta.append(info, sel);
+  meta.append(info);
+  for (const w of a.werkstoffe || []) {
+    const t = document.createElement("span"); t.className = "ws " + w;
+    t.textContent = (config.werkstoffe.find(x => x.id === w) || { titel: w }).titel; meta.append(t);
+  }
+  meta.append(sel);
   const ta = document.createElement("textarea"); ta.value = a.text; ta.oninput = () => { a.text = ta.value; };
   const kopf1 = document.createElement("div"); kopf1.className = "feld"; kopf1.textContent = "Original-Teaser";
   const box = document.createElement("div"); box.className = "abstract";

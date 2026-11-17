@@ -26,7 +26,9 @@ python3 magazin.py
 
 Unter Windows startest du stattdessen `start.bat` per Doppelklick. Der Browser öffnet sich auf `http://127.0.0.1:8765/`.
 
-1. **Suche:** Zeitraum, Anzahl pro Quelle und Quellen wählen, dann auf *Netz durchsuchen* klicken.
+1. **Suche:** Zeitraum, **Werkstoffbereich** (Alle / Metall / Kunststoff), Anzahl pro Quelle und Quellen wählen.
+   Dann auf *Netz durchsuchen* klicken.
+   *In Google Scholar öffnen* öffnet dieselbe Suche, nach Datum sortiert, direkt in Google Scholar.
 2. **Auswahl:** Meldungen an- oder abhaken, die Rubrik ändern und Zusammenfassungen direkt bearbeiten.
    Danach auf *Abstracts schreiben* klicken: Zu jeder ausgewählten Meldung entsteht ein kurzer deutscher Abstract.
    Er steht im PDF direkt unter dem Link zur Quelle und lässt sich vorher im Feld darunter bearbeiten.
@@ -41,6 +43,44 @@ python3 magazin.py --cli --tage 7 --pdf
 
 Mit Abstracts: `python3 magazin.py --cli --tage 7 --abstracts --pdf`.
 Weitere Optionen zeigt `python3 magazin.py --help`, z. B. `--ohne-ki` und `--ohne-teaser`.
+
+## Werkstoffbereich: Metall oder Kunststoff
+
+Bei **Metall** oder **Kunststoff** passiert zweierlei:
+
+1. Die Forschungsquellen (arXiv, Crossref, OpenAlex, Google Scholar) werden gezielt mit Werkstoff-Suchbegriffen abgefragt.
+2. Alle Meldungen werden anschließend anhand von Schlagworten geprüft. Beispiele:
+   * Metall: LPBF, DED, WAAM, Ti-6Al-4V, 316L, Inconel …
+   * Kunststoff: FFF, SLA, SLS, MJF, PA12, PEEK, Resin …
+
+Meldungen, die zu beiden Bereichen passen, erscheinen in beiden.
+Meldungen ohne erkennbaren Werkstoff fallen weg, etwa reine Finanz- oder Personalnachrichten.
+Mit dem Häkchen *auch Meldungen ohne erkennbaren Werkstoff* behältst du sie.
+In der Auswahlliste zeigt eine Markierung an jeder Meldung, welcher Bereich erkannt wurde.
+
+Die Begriffe stehen in `config/quellen.json` unter `werkstoffe` und lassen sich erweitern.
+Dort kannst du auch einen weiteren Bereich anlegen, etwa `keramik`; er erscheint dann automatisch als Auswahl.
+Abkürzungen in Großbuchstaben (ABS, PLA, SLM …) zählen nur in genau dieser Schreibweise. So wird z. B. „abs“ in „abstract“ nicht erkannt.
+
+CLI: `./start.sh --cli --werkstoff metall --pdf`
+
+## Google Scholar
+
+Google bietet für Scholar keine offizielle Schnittstelle.
+Automatisches Abfragen der Webseite ist laut Nutzungsbedingungen nicht erlaubt und wird schnell blockiert.
+Es gibt daher zwei Wege:
+
+1. **Button „In Google Scholar öffnen“:** Er öffnet die passende Suche, nach Datum sortiert, in deinem Browser.
+   Das ist kostenlos und braucht keine Einrichtung.
+2. **Quelle „Google Scholar (via SerpAPI)“:** Die Treffer landen automatisch im Heft.
+   Dafür brauchst du einen Schlüssel von https://serpapi.com. Es gibt ein kleines kostenloses Monatskontingent, danach kostet es.
+   Jede Suche verbraucht eine Anfrage. Den Schlüssel trägst du so ein und setzt danach in der Oberfläche den Haken bei der Quelle:
+   ```bash
+   echo 'export SERPAPI_KEY="DEIN-SERPAPI-SCHLÜSSEL"' >> ~/.bashrc && source ~/.bashrc
+   ```
+
+Scholar liefert nur kurze Snippets und kein exaktes Datum. Bei sehr neuen Treffern errechnet das Programm das Datum aus „vor X Tagen“.
+Als kostenlose Ergänzung mit ähnlicher Abdeckung und vollständigen Abstracts ist **OpenAlex** standardmäßig aktiv.
 
 ## Abstracts
 
@@ -71,6 +111,8 @@ Alle Quellen stehen in `config/quellen.json` und lassen sich dort an- und abscha
 | `rss` | News-Seiten (3DPrint.com, 3D Printing Industry, VoxelMatters, 3Druck.com, …) | `url` |
 | `arxiv` | Preprints über die arXiv-API | `suche` (arXiv-Suchsyntax) |
 | `crossref` | Neue Artikel aus Fachjournalen (Additive Manufacturing, Rapid Prototyping Journal, …) | `issn` und/oder `suche` |
+| `openalex` | Offene Forschungsdatenbank, kostenlos, mit Abstracts | `suche` (Boolesche Suche) |
+| `scholar` | Google Scholar über SerpAPI (Schlüssel nötig, siehe unten) | `suche` |
 
 Das Feld `rubrik` legt fest, wo eine Quelle einsortiert wird:
 
